@@ -4,43 +4,6 @@ import pandas as pd
 st.set_page_config(page_title="Batch Calculator", layout="wide")
 st.title("Dynamic Batch Ingredient Calculator (grams)")
 
-# ---------- Load materials from CSV ----------
-@st.cache_data
-def load_materials_csv(path: str) -> pd.DataFrame:
-    df = pd.read_csv(path)
-
-    # Clean column names (remove extra spaces)
-    df.columns = [c.strip() for c in df.columns]
-
-    # Required columns check
-    if "MaterialCode" not in df.columns or "MaterialName" not in df.columns:
-        raise ValueError("CSV must contain columns: MaterialCode, MaterialName")
-
-    # Clean values
-    df["MaterialCode"] = df["MaterialCode"].astype(str).str.strip()
-    df["MaterialName"] = df["MaterialName"].astype(str).str.strip()
-
-    df = df.dropna(subset=["MaterialCode"])
-    df = df.drop_duplicates(subset=["MaterialCode"]).sort_values("MaterialCode")
-    return df
-
-materials_loaded = False
-codes_list = [""]
-name_map = {}
-
-try:
-    materials = load_materials_csv("MaterialMaster.csv")
-    codes_list = [""] + materials["MaterialCode"].tolist()
-    name_map = dict(zip(materials["MaterialCode"], materials["MaterialName"]))
-    materials_loaded = True
-except Exception as e:
-    st.warning(
-        "MaterialMaster.csv not found or invalid. "
-        "Make sure MaterialMaster.csv is in the same folder as this app "
-        "and contains columns: MaterialCode, MaterialName."
-    )
-    st.caption(f"Debug: {e}")
-
 # ---------- Sidebar ----------
 with st.sidebar:
     st.header("Settings")
@@ -52,33 +15,21 @@ round_step = 0.0 if rounding == "No rounding" else float(rounding.split()[0])
 # ---------- Inputs ----------
 st.subheader("Batch Formula (RFT)")
 
-selected_codes = []
-selected_names = []
+ingredients = []
 old_g = []
 
 for i in range(int(n)):
-    col_code, col_weight = st.columns([1.3, 1.0])
+    col_name, col_weight = st.columns([1.4, 1.0])
 
-    with col_code:
-        if materials_loaded:
-            code = st.selectbox(
-                f"MaterialCode {i+1}",
-                options=codes_list,
-                key=f"code_{i}"
-            )
-            name = name_map.get(code, "") if code else ""
-            if name:
-                st.caption(f"Name: {name}")
-        else:
-            code = st.text_input(
-                f"MaterialCode {i+1}",
-                placeholder="e.g. OQ8154",
-                key=f"code_{i}"
-            )
-            name = ""
+    with col_name:
+        ing = st.text_input(
+            f"Ingredient {i+1}",
+            placeholder="Type anything (e.g., Resin A, OG2001, Sugar, Flour...)",
+            key=f"ing_{i}"
+        ).strip()
 
     with col_weight:
-        label = f"{code} (g)" if code else f"Ingredient {i+1} (g)"
+        label = f"{ing} (g)" if ing else f"Ingredient {i+1} (g)"
         g = st.number_input(
             label,
             min_value=0.0,
@@ -87,8 +38,7 @@ for i in range(int(n)):
             key=f"g_{i}"
         )
 
-    selected_codes.append(code if code else f"Ingredient {i+1}")
-    selected_names.append(name)
+    ingredients.append(ing if ing else f"Ingredient {i+1}")
     old_g.append(float(g))
 
 total_g = sum(old_g)
@@ -123,13 +73,11 @@ if st.button("Calculate batch"):
         st.subheader("New batch results")
 
         df = pd.DataFrame({
-            "MaterialCode": selected_codes,
-            "MaterialName": selected_names,
+            "Ingredient": ingredients,
             "Ratio": [round(r, 10) for r in ratios],
+            "Old (g)": [round(x, 4) for x in old_g],
             "New (g)": [round(x, 4) for x in final],
         })
 
         st.dataframe(df, hide_index=True, use_container_width=True)
         st.write(f"**Check sum:** {sum(final):,.4f} g")
-
-
